@@ -25,11 +25,13 @@ With this setup, you can rapidly iterate on datasets, enforce quality gates, det
    2. [Phase 2: Quality Gate Tools](#phase-2-quality-gate-tools)
    3. [Phase 3: Drift & Performance Tools](#phase-3-drift--performance-tools)
 7. [Running the Server](#running-the-server)
-8. [Sample Usage](#sample-usage)
-9. [Testing](#testing)
-10. [Roadmap & Next Steps](#roadmap--next-steps)
-11. [Development & Contributing](#development--contributing)
-12. [License](#license)
+8. [Claude Desktop Integration](#claude-desktop-integration)
+9. [Troubleshooting & Common Issues](#troubleshooting--common-issues)
+10. [Sample Usage](#sample-usage)
+11. [Testing](#testing)
+12. [Roadmap & Next Steps](#roadmap--next-steps)
+13. [Development & Contributing](#development--contributing)
+14. [License](#license)
 
 ---
 
@@ -53,9 +55,10 @@ By the end of Phase 3, the server supports:
 
 ## Prerequisites
 
-* **Python ≥ 3.12**
+* **Python ≥ 3.12** (pyenv recommended for version management)
 * **uv** for environment & dependency management
 * **MCP CLI** (provided by `mcp[cli]`)
+* **Claude Desktop** (for MCP integration)
 * **Git** (optional, for version control)
 
 ## Installation & Environment Setup
@@ -82,7 +85,7 @@ By the end of Phase 3, the server supports:
      matplotlib seaborn plotly scipy scikit-learn \
      ydata-profiling missingno \
      xgboost ipykernel mlflow \
-     evidently
+     evidently python-dateutil
    ```
 
 4. **Lock dependencies** for reproducibility:
@@ -104,6 +107,7 @@ By the end of Phase 3, the server supports:
    ```bash
    which python && python -V
    pip list | grep evidently
+   python -c "import missingno, evidently, dateutil; print('All dependencies available')"
    ```
 
 ## Directory Structure
@@ -114,6 +118,7 @@ mcp-server/
 ├── pyproject.toml         # Project config & dependencies
 ├── requirements.lock      # Hash-pinned lockfile
 ├── server.py              # FastMCP server implementation
+├── launch_server.py       # Environment-aware launcher script
 ├── test_evidently_tools.py # Comprehensive test harness
 ├── debug_test.py          # Debug summary structure for Evidently
 ├── reports/               # Generated HTML dashboards
@@ -170,11 +175,280 @@ mcp-server/
 
 ## Running the Server
 
+### Method 1: Direct Python Execution
 ```bash
 cd mcp-server
 source .venv/bin/activate
-mcp dev server.py
-# ➜ 🟢 EDA Server | ready – listening on stdio
+python server.py
+# Server runs in stdio mode, ready for MCP connections
+```
+
+### Method 2: Using MCP CLI
+```bash
+cd mcp-server
+source .venv/bin/activate
+mcp run server.py
+# Server runs in stdio mode, ready for MCP connections
+```
+
+### Method 3: Using uv (Recommended for Claude Desktop)
+```bash
+cd mcp-server
+uv run server.py
+# Server runs in stdio mode, ready for MCP connections
+```
+
+## Claude Desktop Integration
+
+### Prerequisites
+- **Claude Desktop** installed and running
+- **uv** available in your PATH (`which uv` should return a path)
+- **Python 3.12+** with all dependencies installed
+
+### Setup Instructions
+
+1. **Verify uv is available**:
+   ```bash
+   which uv
+   # Should return: /opt/homebrew/bin/uv (or similar)
+   ```
+
+2. **Configure Claude Desktop**:
+   
+   **macOS/Linux**:
+   ```bash
+   # Open the Claude Desktop config file
+   code ~/Library/Application\ Support/Claude/claude_desktop_config.json
+   ```
+   
+   **Windows (PowerShell)**:
+   ```powershell
+   code $env:AppData\Claude\claude_desktop_config.json
+   ```
+
+3. **Add MCP server configuration**:
+   
+   Replace the contents with:
+   ```json
+   {
+     "mcpServers": {
+       "liquid-intel": {
+         "command": "uv",
+         "args": [
+           "--directory",
+           "/Users/taimoorawan/Documents/Liquid_intelligence/mcp-server",
+           "run",
+           "server.py"
+         ]
+       }
+     }
+   }
+   ```
+   
+   **Important**: Replace the path with the absolute path to your `mcp-server` directory.
+
+4. **Save and restart Claude Desktop**:
+   - Save the config file
+   - Completely quit Claude Desktop
+   - Restart Claude Desktop
+
+5. **Verify connection**:
+   - In Claude Desktop, you should see the "liquid-intel" MCP server available
+   - The tools (`load_data`, `basic_info`, `data_quality_report`, etc.) should appear in the UI
+   - You can now call these tools directly in Claude conversations
+
+### Alternative Configuration Methods
+
+If the `uv` method doesn't work, you can also configure Claude Desktop to use:
+
+**Method A: Direct Python with environment variables**
+```json
+{
+  "mcpServers": {
+    "liquid-intel": {
+      "command": "python",
+      "args": ["launch_server.py"],
+      "cwd": "/Users/taimoorawan/Documents/Liquid_intelligence/mcp-server",
+      "env": {
+        "PYTHONPATH": "/Users/taimoorawan/.pyenv/versions/3.12.3/lib/python3.12/site-packages"
+      }
+    }
+  }
+}
+```
+
+**Method B: Using the launcher script**
+```json
+{
+  "mcpServers": {
+    "liquid-intel": {
+      "command": "python",
+      "args": ["launch_server.py"],
+      "cwd": "/Users/taimoorawan/Documents/Liquid_intelligence/mcp-server"
+    }
+  }
+}
+```
+
+## Troubleshooting & Common Issues
+
+### Issue 1: "No module named 'missingno'" or "No module named 'dateutil'"
+
+**Symptoms**: Server fails to start with import errors
+
+**Solution**:
+```bash
+# Install missing dependencies
+pip install python-dateutil missingno ydata-profiling evidently
+
+# Or use the launcher script which sets PYTHONPATH
+python launch_server.py
+```
+
+### Issue 2: Python Environment Mismatch
+
+**Symptoms**: Dependencies installed but server still can't find them
+
+**Root Cause**: MCP CLI using different Python environment than where dependencies are installed
+
+**Solutions**:
+
+1. **Use explicit PYTHONPATH**:
+   ```bash
+   PYTHONPATH=/Users/taimoorawan/.pyenv/versions/3.12.3/lib/python3.12/site-packages mcp run server.py
+   ```
+
+2. **Use the launcher script**:
+   ```bash
+   python launch_server.py
+   ```
+
+3. **Use uv (recommended)**:
+   ```bash
+   uv run server.py
+   ```
+
+### Issue 3: Claude Desktop Can't Connect
+
+**Symptoms**: Claude Desktop shows "Server disconnected" or tools don't appear
+
+**Solutions**:
+
+1. **Check Claude Desktop logs**:
+   - Open Claude Desktop
+   - Go to Help → Toggle Developer Tools
+   - Check Console for error messages
+
+2. **Verify server is running**:
+   ```bash
+   ps aux | grep "mcp run server.py"
+   # or
+   ps aux | grep "python.*server.py"
+   ```
+
+3. **Test server manually**:
+   ```bash
+   cd mcp-server
+   python server.py
+   # Should start without errors
+   ```
+
+4. **Check config file syntax**:
+   ```bash
+   cat ~/Library/Application\ Support/Claude/claude_desktop_config.json | python -m json.tool
+   ```
+
+### Issue 4: "uv not found" or "uv command not available"
+
+**Symptoms**: Claude Desktop can't find the `uv` command
+
+**Solutions**:
+
+1. **Install uv**:
+   ```bash
+   # macOS
+   brew install uv
+   
+   # Linux
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   ```
+
+2. **Use full path in config**:
+   ```json
+   {
+     "mcpServers": {
+       "liquid-intel": {
+         "command": "/opt/homebrew/bin/uv",
+         "args": [
+           "--directory",
+           "/Users/taimoorawan/Documents/Liquid_intelligence/mcp-server",
+           "run",
+           "server.py"
+         ]
+       }
+     }
+   }
+   ```
+
+### Issue 5: Evidently Version Compatibility
+
+**Symptoms**: Evidently API errors or missing methods
+
+**Solution**: The server is configured for Evidently 0.7+ with fallback mechanisms:
+- Classification metrics use sklearn fallback
+- Drift metrics extracted from Evidently's flat metrics array
+- Regression metrics use Evidently's RegressionPreset
+
+### Issue 6: Server Starts But Tools Don't Work
+
+**Symptoms**: Server connects but tool calls fail
+
+**Solutions**:
+
+1. **Check tool availability**:
+   ```bash
+   # Test a simple tool
+   python -c "
+   import asyncio
+   from server import mcp
+   print('Available tools:', [tool.name for tool in mcp.tools])
+   "
+   ```
+
+2. **Verify data files exist**:
+   ```bash
+   ls -la *.csv *.xlsx *.json
+   ```
+
+3. **Check reports directory**:
+   ```bash
+   mkdir -p reports
+   ```
+
+### Debug Commands
+
+**Check Python environment**:
+```bash
+which python
+python --version
+pip list | grep -E "(evidently|missingno|dateutil)"
+```
+
+**Test server startup**:
+```bash
+cd mcp-server
+python -c "import server; print('Server imports successfully')"
+```
+
+**Check MCP CLI**:
+```bash
+mcp --help
+mcp run --help
+```
+
+**Verify Claude Desktop config**:
+```bash
+cat ~/Library/Application\ Support/Claude/claude_desktop_config.json
 ```
 
 ## Sample Usage
@@ -253,7 +527,7 @@ All HTML reports land under `reports/` (e.g. `reports/dq_iris.html`, `reports/dr
 
 ## Roadmap & Next Steps
 
-* **Phase 3 cont’d**: add `train_model` (sklearn/XGBoost → MLflow) & `predict` tool.
+* **Phase 3 cont'd**: add `train_model` (sklearn/XGBoost → MLflow) & `predict` tool.
 * **Phase 4**: HTTP/SSE exposure (`mcp run server.py --port 8000`), Docker + CI, ArgoCD deployment.
 * **Phase 5**: implement `drift_watcher`, Slack/email alerts when thresholds breach.
 
@@ -274,4 +548,3 @@ This project is released under the **MIT License**. See [LICENSE](LICENSE) for d
 
 ---
 
-*Generated using the detailed change logs from the Liquid Intelligence project.*
