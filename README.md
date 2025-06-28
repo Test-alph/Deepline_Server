@@ -210,7 +210,7 @@ uv run server.py
 1. **Verify uv is available**:
    ```bash
    which uv
-   # Should return: /opt/homebrew/bin/uv (or similar)
+   # Should return a path like: /usr/local/bin/uv or /opt/homebrew/bin/uv
    ```
 
 2. **Configure Claude Desktop**:
@@ -236,7 +236,7 @@ uv run server.py
          "command": "uv",
          "args": [
            "--directory",
-           "/Users/taimoorawan/Documents/Liquid_intelligence/mcp-server",
+           "/path/to/your/mcp-server",
            "run",
            "server.py"
          ]
@@ -245,7 +245,7 @@ uv run server.py
    }
    ```
    
-   **Important**: Replace the path with the absolute path to your `mcp-server` directory.
+   **Important**: Replace `/path/to/your/mcp-server` with the absolute path to your `mcp-server` directory.
 
 4. **Save and restart Claude Desktop**:
    - Save the config file
@@ -268,9 +268,9 @@ If the `uv` method doesn't work, you can also configure Claude Desktop to use:
     "liquid-intel": {
       "command": "python",
       "args": ["launch_server.py"],
-      "cwd": "/Users/taimoorawan/Documents/Liquid_intelligence/mcp-server",
+      "cwd": "/path/to/your/mcp-server",
       "env": {
-        "PYTHONPATH": "/Users/taimoorawan/.pyenv/versions/3.12.3/lib/python3.12/site-packages"
+        "PYTHONPATH": "/path/to/your/python/site-packages"
       }
     }
   }
@@ -284,11 +284,15 @@ If the `uv` method doesn't work, you can also configure Claude Desktop to use:
     "liquid-intel": {
       "command": "python",
       "args": ["launch_server.py"],
-      "cwd": "/Users/taimoorawan/Documents/Liquid_intelligence/mcp-server"
+      "cwd": "/path/to/your/mcp-server"
     }
   }
 }
 ```
+
+**Note**: If using Method B with the launcher script, you'll need to update `launch_server.py` with your actual paths:
+- Replace `/path/to/your/python/site-packages` with your actual Python site-packages directory
+- Replace `/path/to/your/mcp-server` with your actual mcp-server directory path
 
 ## Troubleshooting & Common Issues
 
@@ -315,7 +319,7 @@ python launch_server.py
 
 1. **Use explicit PYTHONPATH**:
    ```bash
-   PYTHONPATH=/Users/taimoorawan/.pyenv/versions/3.12.3/lib/python3.12/site-packages mcp run server.py
+   PYTHONPATH=/path/to/your/python/site-packages mcp run server.py
    ```
 
 2. **Use the launcher script**:
@@ -378,10 +382,10 @@ python launch_server.py
    {
      "mcpServers": {
        "liquid-intel": {
-         "command": "/opt/homebrew/bin/uv",
+         "command": "/full/path/to/uv",
          "args": [
            "--directory",
-           "/Users/taimoorawan/Documents/Liquid_intelligence/mcp-server",
+           "/path/to/your/mcp-server",
            "run",
            "server.py"
          ]
