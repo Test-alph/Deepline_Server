@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mcp-server"
+version = "0.1.0"
+description = "MCP Server for Data Science and Machine Learning"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # MCP (Model Context Protocol) - Core framework for AI model interactions
+    "mcp[cli]",
+    
+    # Data manipulation and analysis libraries
+    "pandas",      # Primary data manipulation and analysis library
+    "numpy",       # Numerical computing and array operations
+    "polars",      # Fast DataFrame library with Rust backend
+    "pyarrow",     # Columnar data format for efficient data storage and transfer
+    
+    # Data visualization libraries
+    "matplotlib",  # Basic plotting and visualization
+    "seaborn",     # Statistical data visualization built on matplotlib
+    "plotly",      # Interactive plots and dashboards
+    
+    # Scientific computing and machine learning
+    "scipy",       # Scientific computing and optimization
+    "scikit-learn", # Machine learning algorithms and utilities
+    
+    # Data profiling and monitoring
+    "ydata-profiling", # Automated data quality reports and profiling
+    "evidently",   # ML model monitoring and data quality tracking
+    "missingno",   # Missing data visualization and analysis
+    
+    # Advanced machine learning
+    "xgboost",     # Gradient boosting framework for ML models
+    
+    # Development and experimentation
+    "ipykernel",   # Jupyter kernel for interactive development
+    "mlflow"       # ML lifecycle management and experiment tracking
+]
+
+[project.optional-dependencies]
+dev = [
+    # Code quality and formatting
+    "black",       # Code formatter for consistent Python code style
+    "ruff",        # Fast Python linter and formatter
+    "mypy",        # Static type checker for Python
+    
+    # Testing
+    "pytest"       # Testing framework for Python
+]
+
+[tool.setuptools]
+py-modules = ["server", "main"]

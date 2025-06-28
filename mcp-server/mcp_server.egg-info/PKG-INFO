@@ -1,0 +1,27 @@
+Metadata-Version: 2.4
+Name: mcp-server
+Version: 0.1.0
+Summary: MCP Server for Data Science and Machine Learning
+Requires-Python: >=3.12
+Description-Content-Type: text/markdown
+Requires-Dist: mcp[cli]
+Requires-Dist: pandas
+Requires-Dist: numpy
+Requires-Dist: polars
+Requires-Dist: pyarrow
+Requires-Dist: matplotlib
+Requires-Dist: seaborn
+Requires-Dist: plotly
+Requires-Dist: scipy
+Requires-Dist: scikit-learn
+Requires-Dist: ydata-profiling
+Requires-Dist: evidently
+Requires-Dist: missingno
+Requires-Dist: xgboost
+Requires-Dist: ipykernel
+Requires-Dist: mlflow
+Provides-Extra: dev
+Requires-Dist: black; extra == "dev"
+Requires-Dist: ruff; extra == "dev"
+Requires-Dist: mypy; extra == "dev"
+Requires-Dist: pytest; extra == "dev"
