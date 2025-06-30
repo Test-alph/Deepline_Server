@@ -24,14 +24,17 @@ With this setup, you can rapidly iterate on datasets, enforce quality gates, det
    1. [Phase 1: EDA Tools](#phase-1-eda-tools)
    2. [Phase 2: Quality Gate Tools](#phase-2-quality-gate-tools)
    3. [Phase 3: Drift & Performance Tools](#phase-3-drift--performance-tools)
-7. [Running the Server](#running-the-server)
-8. [Claude Desktop Integration](#claude-desktop-integration)
-9. [Troubleshooting & Common Issues](#troubleshooting--common-issues)
-10. [Sample Usage](#sample-usage)
+7. [Configuration Management](#configuration-management)
+8. [Interactive Checkpoints](#interactive-checkpoints)
+9. [Running the Server](#running-the-server)
+10. [Claude Desktop Integration](#claude-desktop-integration)
 11. [Testing](#testing)
-12. [Roadmap & Next Steps](#roadmap--next-steps)
-13. [Development & Contributing](#development--contributing)
-14. [License](#license)
+12. [Troubleshooting & Common Issues](#troubleshooting--common-issues)
+13. [Sample Usage](#sample-usage)
+14. [EDA Server Enhancement Report](#eda-server-enhancement-report)
+15. [Roadmap & Next Steps](#roadmap--next-steps)
+16. [Development & Contributing](#development--contributing)
+17. [License](#license)
 
 ---
 
@@ -87,7 +90,7 @@ By the end of Phase 3, the server supports:
      "matplotlib==3.10.0" "seaborn==0.13.2" "plotly==5.24.1" "scipy==1.15.3" "scikit-learn==1.7.0" \
      "ydata-profiling==4.16.1" "missingno==0.5.2" \
      "evidently==0.7.9" "python-dateutil==2.9.0.post0" "pyod==2.0.5" \
-     "pydantic==2.11.7"
+     "pydantic==2.11.7" "pyyaml==6.0.1" "pytest==7.4.3"
    ```
 
 4. **Lock dependencies** for reproducibility:
@@ -113,8 +116,8 @@ By the end of Phase 3, the server supports:
 
    ```bash
    which python && python -V
-   pip list | grep -E "(evidently|missingno|dateutil|pyod|pandas|numpy)"
-   python -c "import missingno, evidently, dateutil, pyod, pandas, numpy; print('All core dependencies available')"
+   pip list | grep -E "(evidently|missingno|dateutil|pyod|pandas|numpy|pyyaml|pytest)"
+   python -c "import missingno, evidently, dateutil, pyod, pandas, numpy, yaml, pytest; print('All core dependencies available')"
    ```
 
 ## Dependencies & Libraries
@@ -154,6 +157,12 @@ By the end of Phase 3, the server supports:
 | **seaborn** | 0.13.2 | Statistical data visualization built on matplotlib |
 | **plotly** | 5.24.1 | Interactive plotting for web-based visualizations |
 
+### Configuration & Testing
+| Library | Version | Purpose |
+|---------|---------|---------|
+| **pyyaml** | 6.0.1 | YAML configuration file parsing and validation |
+| **pytest** | 7.4.3 | Testing framework for unit and integration tests |
+
 ### Development & Environment
 | Library | Version | Purpose |
 |---------|---------|---------|
@@ -189,57 +198,30 @@ By the end of Phase 3, the server supports:
 
 #### Schema Inference (`infer_schema`)
 - **pandas**: Data type detection and column analysis
-- **re**: Regular expressions for pattern matching (email, phone, URL, date)
+- **re**: Regular expressions for pattern matching (email, phone, URL, date, UUID)
 
 #### Outlier Detection (`detect_outliers`)
 - **pyod**: Isolation Forest and Local Outlier Factor algorithms
 - **scikit-learn**: Statistical outlier detection methods
-- **numpy**: Statistical calculations (IQR, quantiles)
+- **numpy**: Statistical calculations (IQR, quantiles, Mahalanobis distance)
+
+#### Feature Transformation (`feature_transformation`)
+- **scipy**: Box-Cox transformation and statistical functions
+- **scikit-learn**: VIF calculation and supervised discretization
+- **pandas**: Quantile binning and cardinality reduction
 
 #### Data Quality & Drift (`data_quality_report`, `drift_analysis`)
 - **evidently**: Data quality scoring and drift detection
 - **pandas**: Data preprocessing and transformation
 
-#### Model Performance (`model_performance_report`)
-- **evidently**: Regression performance metrics
-- **scikit-learn**: Classification metrics (accuracy, precision, recall, F1)
-- **numpy**: Statistical calculations
+#### Configuration Management (`config.py`, `config.yaml`)
+- **pyyaml**: YAML configuration file parsing
+- **pydantic**: Configuration validation and type safety
 
-#### Target Analysis (`target_analysis`)
-- **pandas**: Target column inspection, type inference, and correlation
-- **matplotlib**: Bar charts, histograms, Q–Q plots, scatter plots
-- **scipy**: Q–Q plot and distributional checks
-- **numpy**: Correlation and summary statistics
-
-### System Requirements
-- **Python**: ≥ 3.12 (pyenv recommended)
-- **Memory**: Minimum 4GB RAM (8GB+ recommended for large datasets)
-- **Storage**: 1GB+ free space for reports and temporary files
-- **OS**: macOS, Linux, Windows (with WSL recommended)
-
-### Optional Enhancements
-- **Docker**: Containerization for deployment
-- **PostgreSQL/MySQL**: Database integration for persistent storage
-- **Redis**: Caching for improved performance
-- **Slack/Email**: Alerting for drift detection and quality issues
-
-### Version Compatibility Notes
-
-**Tested Environment**:
-- **Python**: 3.12.3 (pyenv)
-- **OS**: macOS 14.5.0 (Darwin)
-- **Package Manager**: uv (latest)
-
-**Key Version Dependencies**:
-- **evidently 0.7.9**: Compatible with our drift detection and quality reporting tools
-- **pandas 2.3.0**: Required for DataFrame operations and type inference
-- **pyod 2.0.5**: Required for model-based outlier detection (Isolation Forest, LOF)
-- **scikit-learn 1.7.0**: Used for classification metrics and statistical outlier detection
-
-**Known Working Combinations**:
-- All listed versions have been tested together and work correctly
-- The `requirements-exact.txt` file ensures reproducible builds
-- Optional dependencies can be added without affecting core functionality
+#### Testing (`test_eda.py`)
+- **pytest**: Test framework and fixtures
+- **pandas**: Test data generation and manipulation
+- **numpy**: Statistical test data creation
 
 ## Directory Structure
 
@@ -250,10 +232,13 @@ mcp-server/
 ├── requirements.lock      # Hash-pinned lockfile
 ├── requirements-exact.txt # Exact pinned versions for reproducibility
 ├── server.py              # FastMCP server implementation
+├── config.py              # Configuration management and validation
+├── config.yaml            # Centralized configuration file
+├── utils.py               # Utility functions for common operations
+├── checkpoints.py         # Interactive checkpoint system
+├── test_eda.py            # Comprehensive unit test suite
 ├── launch_server.py       # Environment-aware launcher script
-├── test_evidently_tools.py # Comprehensive test harness
-├── debug_test.py          # Debug summary structure for Evidently
-├── reports/               # Generated HTML dashboards
+├── reports/               # Generated HTML dashboards and visualizations
 └── README.md              # ← you are here
 ```
 
@@ -277,6 +262,9 @@ mcp-server/
   ```
 * **In-memory store** guarded by an `asyncio.Lock`
 * **HTML reports** saved under `reports/`, surfaced via `file://` URIs
+* **Configuration management** via `config.yaml` and `config.py`
+* **Utility functions** in `utils.py` for common operations
+* **Interactive checkpoints** via `checkpoints.py` for human approval
 
 ## Available Tools
 
@@ -284,14 +272,15 @@ mcp-server/
 
 | Tool                        | Description                                                      |
 | --------------------------- | ---------------------------------------------------------------- |
-| **`load_data`**             | Load CSV, Excel, or JSON into shared memory                      |
+| **`load_data`**             | Load CSV, Excel, or JSON into shared memory with memory reporting |
 | **`basic_info`**            | Show shape, columns, dtypes, and first five rows                 |
-| **`missing_data_analysis`** | Compute missing-value stats + render missingno matrix            |
-| **`create_visualization`**  | Render histogram, boxplot, scatter, correlation, or missing plot |
-| **`statistical_summary`**   | Generate `describe()` and correlation matrix                     |
+| **`missing_data_analysis`** | Compute missing-value stats + render missingno matrix with clustering, thresholded dropping, and imputation strategies |
+| **`create_visualization`**  | Render histogram, boxplot, scatter, correlation (with labels), or missing plot |
+| **`statistical_summary`**   | Generate `describe()` and correlation matrix with large dataset sampling |
 | **`list_datasets`**         | List dataset names with row/column counts                        |
-| **`infer_schema`**          | Infer column types, nullability, ranges, and patterns            |
-| **`detect_outliers`**       | Detect outliers using IQR, Isolation Forest, or Local Outlier Factor |
+| **`infer_schema`**          | Infer column types, nullability, ranges, patterns (email, phone, URL, date, UUID), and ID heuristics |
+| **`detect_outliers`**       | Detect outliers using IQR, Isolation Forest, Local Outlier Factor, and Mahalanobis distance |
+| **`feature_transformation`** | Apply Box-Cox, log, quantile binning, cardinality reduction, VIF analysis, and supervised discretization |
 | **`target_analysis`**       | Automated, human-in-the-loop target column analysis (classification/regression, priors, skew, top features, and visualizations) |
 
 ### Phase 2 – Quality Gate Tools
@@ -307,6 +296,106 @@ mcp-server/
 | ------------------------------ | --------------------------------------------------------------------------------- |
 | **`drift_analysis`**           | Run Evidently `DataDriftPreset`; extract `DriftedColumnsCount`                    |
 | **`model_performance_report`** | Regression via Evidently `RegressionPreset`; classification via `sklearn.metrics` |
+
+## Configuration Management
+
+The EDA server uses a centralized configuration system for easy tuning and maintenance:
+
+### Configuration File (`config.yaml`)
+
+```yaml
+# Missing Data Analysis
+missing_data:
+  column_drop_threshold: 0.50  # 50% - drop columns with >50% missing data
+  row_drop_threshold: 0.50     # 50% - drop rows with >50% missing values
+  systematic_correlation_threshold: 0.70  # High correlation for systematic missingness
+
+# Outlier Detection
+outlier_detection:
+  iqr_factor: 1.5              # Standard IQR multiplier
+  contamination_default: 0.05  # 5% expected outliers for model-based methods
+  mahalanobis_confidence: 0.975  # Chi-square confidence level
+
+# Feature Transformation
+feature_transformation:
+  rare_category_threshold: 0.005  # 0.5% threshold for rare categories
+  vif_severe_threshold: 10.0      # VIF > 10 indicates severe multicollinearity
+  boxcox_epsilon: 1e-6            # Small epsilon for Box-Cox shifting
+
+# Performance
+performance:
+  memory_warning_threshold: 1000  # MB - warn if dataset > 1GB
+  correlation_sample_size: 10000  # Sample size for correlation matrices
+```
+
+### Configuration Usage
+
+```python
+from config import config
+
+# Access configuration values
+drop_threshold = config.missing_data.column_drop_threshold
+iqr_factor = config.outlier_detection.iqr_factor
+```
+
+### Configuration Validation
+
+The configuration system uses Pydantic for type safety and validation:
+
+```python
+# Invalid configuration will raise validation errors
+config.MissingDataConfig(column_drop_threshold=1.5)  # Raises error: > 1.0
+```
+
+## Interactive Checkpoints
+
+The EDA server implements a human-in-the-loop approval system for critical operations:
+
+### Checkpoint Types
+
+1. **Missing Data Analysis**: Approve missing data patterns and recommended actions
+2. **Outlier Detection**: Review outlier patterns and detection methods
+3. **Feature Transformation**: Approve transformations before modeling
+4. **Schema Inference**: Review inferred schema and data quality
+
+### Checkpoint Configuration
+
+```yaml
+checkpoints:
+  require_approval: true          # Whether to require human approval
+  approval_timeout: 300           # Seconds to wait for approval
+  auto_approve_small_changes: true  # Auto-approve minor transformations
+```
+
+### Checkpoint Usage
+
+```python
+from checkpoints import request_transformation_approval
+
+# Request approval for feature transformations
+approved = await request_transformation_approval(
+    dataset_name="my_data",
+    original_shape=(1000, 5),
+    transformed_shape=(1000, 8),
+    new_columns=["feature_1_log", "feature_2_boxcox"],
+    transformations_applied=["log", "boxcox"]
+)
+
+if not approved:
+    # Handle rejection
+    return "Transformation rejected by user"
+```
+
+### Disabling Checkpoints
+
+For automated processing, checkpoints can be disabled:
+
+```python
+from checkpoints import disable_checkpoints, enable_checkpoints
+
+disable_checkpoints()  # For automated workflows
+enable_checkpoints()   # For interactive workflows
+```
 
 ## Running the Server
 
@@ -425,9 +514,44 @@ If the `uv` method doesn't work, you can also configure Claude Desktop to use:
 }
 ```
 
-**Note**: If using Method B with the launcher script, you'll need to update `launch_server.py` with your actual paths:
-- Replace `/path/to/your/python/site-packages` with your actual Python site-packages directory
-- Replace `/path/to/your/mcp-server` with your actual mcp-server directory path
+## Testing
+
+The EDA server includes comprehensive unit tests covering edge cases and core functionality:
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest test_eda.py -v
+
+# Run specific test categories
+pytest test_eda.py::TestEDAServer -v
+pytest test_eda.py::TestConfiguration -v
+pytest test_eda.py::TestUtils -v
+
+# Run tests with coverage
+pytest test_eda.py --cov=server --cov=utils --cov=config -v
+```
+
+### Test Coverage
+
+The test suite covers:
+
+- **Edge Cases**: All-missing data, constant columns, single values, large datasets
+- **Core Functionality**: Data loading, missing analysis, outlier detection, schema inference
+- **Configuration**: Validation, defaults, error handling
+- **Utilities**: Quantile binning, VIF calculation, memory formatting
+- **Concurrent Access**: Multiple simultaneous operations
+- **Pattern Detection**: Email, phone, date, UUID patterns
+
+### Test Data
+
+Tests use synthetic datasets including:
+- Normal datasets with missing values
+- All-missing datasets
+- Constant value datasets
+- Large datasets for performance testing
+- Pattern-rich datasets for schema inference
 
 ## Troubleshooting & Common Issues
 
@@ -438,7 +562,7 @@ If the `uv` method doesn't work, you can also configure Claude Desktop to use:
 **Solution**:
 ```bash
 # Install missing dependencies
-pip install python-dateutil missingno ydata-profiling evidently
+pip install python-dateutil missingno ydata-profiling evidently pyyaml pytest
 
 # Or use the launcher script which sets PYTHONPATH
 python launch_server.py
@@ -529,39 +653,48 @@ python launch_server.py
    }
    ```
 
-### Issue 5: Evidently Version Compatibility
+### Issue 5: Configuration Errors
 
-**Symptoms**: Evidently API errors or missing methods
-
-**Solution**: The server is configured for Evidently 0.7+ with fallback mechanisms:
-- Classification metrics use sklearn fallback
-- Drift metrics extracted from Evidently's flat metrics array
-- Regression metrics use Evidently's RegressionPreset
-
-### Issue 6: Server Starts But Tools Don't Work
-
-**Symptoms**: Server connects but tool calls fail
+**Symptoms**: Server fails to start with configuration validation errors
 
 **Solutions**:
 
-1. **Check tool availability**:
+1. **Check configuration file**:
    ```bash
-   # Test a simple tool
-   python -c "
-   import asyncio
-   from server import mcp
-   print('Available tools:', [tool.name for tool in mcp.tools])
-   "
+   python -c "import config; print('Configuration loaded successfully')"
    ```
 
-2. **Verify data files exist**:
+2. **Validate configuration manually**:
    ```bash
-   ls -la *.csv *.xlsx *.json
+   python -c "from config import load_config; cfg = load_config(); print('Config valid')"
    ```
 
-3. **Check reports directory**:
+3. **Use default configuration**:
    ```bash
-   mkdir -p reports
+   # Remove config.yaml to use defaults
+   mv config.yaml config.yaml.backup
+   python server.py
+   ```
+
+### Issue 6: Test Failures
+
+**Symptoms**: Unit tests fail with import or assertion errors
+
+**Solutions**:
+
+1. **Install test dependencies**:
+   ```bash
+   pip install pytest pytest-asyncio
+   ```
+
+2. **Run tests in isolation**:
+   ```bash
+   pytest test_eda.py::TestEDAServer::test_load_data -v
+   ```
+
+3. **Check test environment**:
+   ```bash
+   python -c "import server, config, utils, checkpoints; print('All modules available')"
    ```
 
 ### Debug Commands
@@ -570,7 +703,7 @@ python launch_server.py
 ```bash
 which python
 python --version
-pip list | grep -E "(evidently|missingno|dateutil)"
+pip list | grep -E "(evidently|missingno|dateutil|pyod|pandas|numpy|pyyaml|pytest)"
 ```
 
 **Test server startup**:
@@ -588,6 +721,11 @@ mcp run --help
 **Verify Claude Desktop config**:
 ```bash
 cat ~/Library/Application\ Support/Claude/claude_desktop_config.json
+```
+
+**Test configuration**:
+```bash
+python -c "from config import get_config; cfg = get_config(); print('Config loaded:', cfg.missing_data.column_drop_threshold)"
 ```
 
 ## Sample Usage
@@ -652,6 +790,19 @@ cat ~/Library/Application\ Support/Claude/claude_desktop_config.json
    print(f"Outlier counts: {outliers_lof.result.counts}")
    ```
 
+7. **Apply feature transformations**:
+   ```python
+   # Apply multiple transformations
+   transformations = await feature_transformation(
+       "iris", 
+       transformations=["boxcox", "log", "binning", "cardinality"],
+       target_col="target"
+   )
+   print(f"Original shape: {transformations.original_shape}")
+   print(f"Transformed shape: {transformations.transformed_shape}")
+   print(f"New columns: {transformations.steps[-1].statistics['new_columns']}")
+   ```
+
 ### Schema Inference Example
 
 The `infer_schema` tool provides comprehensive column analysis:
@@ -694,9 +845,9 @@ schema = await infer_schema("my_dataset")
 }
 ```
 
-**Supported patterns**: email, url, phone, date
+**Supported patterns**: email, url, phone, date, uuid, credit_card, postal_code, ip_address
 **Data types**: number, string, datetime
-**Metadata**: nullability, ranges, unique counts, sample values
+**Metadata**: nullability, ranges, unique counts, sample values, precision/scale
 
 ### Outlier Detection Example
 
@@ -719,15 +870,31 @@ outliers = await detect_outliers("my_dataset", method="iqr", factor=1.5)
             "salary": 2,
             "height": 2
         },
-        "total_rows": 1000
+        "total_rows": 1000,
+        "steps": [
+            {
+                "step_name": "Data Distribution Analysis",
+                "statistics": {
+                    "age": {"mean": 35.2, "std": 12.1, "skewness": 0.8}
+                }
+            },
+            {
+                "step_name": "IQR Outlier Detection",
+                "statistics": {
+                    "age": {"q1": 26, "q3": 44, "iqr": 18, "outlier_count": 4}
+                }
+            }
+        ],
+        "method_used": "iqr"
     },
-    "image_uri": "file:///path/to/reports/outliers_my_dataset_iqr.png"
+    "image_uri": "file:///path/to/reports/outliers_my_dataset_iqr.png",
+    "human_checkpoint": "=== OUTLIER DETECTION CHECKPOINT ===\n..."
 }
 ```
 
 **Supported methods**:
 - **IQR**: Interquartile range method (factor=1.5 is standard)
-- **isolation_forest**: Model-based detection using Isolation Forest
+- **isolation_forest**: Model-based anomaly detection
 - **lof**: Model-based detection using Local Outlier Factor
 
 **Parameters**:
@@ -735,24 +902,249 @@ outliers = await detect_outliers("my_dataset", method="iqr", factor=1.5)
 - `contamination`: Expected outlier fraction for model-based methods (default: 0.05)
 - `sample_size`: Maximum rows for plotting (default: 10,000)
 
-**Output**: Structured outlier indices, counts, and visualization image
+**Output**: Structured outlier indices, counts, step-by-step analysis, and visualization image
 
-## Testing
+### Feature Transformation Example
 
-* **`test_evidently_tools.py`**: end-to-end test harness calling all tools programmatically.
-* **`debug_test.py`**: prints actual summary keys for drift/regression debugging.
-* **Run tests**:
+The `feature_transformation` tool provides comprehensive feature engineering:
 
-  ```bash
-  pytest           # runs unit tests if any
-  python test_evidently_tools.py
-  ```
+```python
+# Apply multiple transformations
+result = await feature_transformation(
+    "my_dataset",
+    transformations=["boxcox", "log", "binning", "cardinality"],
+    target_col="target"
+)
+
+# Example output structure:
+{
+    "dataset_name": "my_dataset",
+    "original_shape": (1000, 5),
+    "transformed_shape": (1000, 9),
+    "steps": [
+        {
+            "step_name": "Box-Cox Transformation",
+            "statistics": {
+                "age": {
+                    "original_skewness": 1.2,
+                    "transformed_skewness": 0.1,
+                    "lambda_parameter": 0.3,
+                    "shift_applied": 0.0
+                }
+            }
+        },
+        {
+            "step_name": "Variance Inflation Factor (VIF) Analysis",
+            "statistics": {
+                "vif_scores": {"age": 1.2, "income": 8.5},
+                "high_vif_columns": ["income"]
+            }
+        }
+    ],
+    "image_uri": "file:///path/to/reports/feature_transformation_my_dataset.png",
+    "human_checkpoint": "=== FEATURE TRANSFORMATION CHECKPOINT ===\n..."
+}
+```
+
+**Supported transformations**:
+- **boxcox**: Box-Cox transformation for skewed data
+- **log**: Logarithmic transformation with automatic shifting
+- **quantile binning**: Discretize numeric variables
+- **cardinality reduction**: Group rare categories (0.5% threshold)
+- **VIF analysis**: Detect multicollinearity
+- **supervised discretization**: Target-guided binning for classification
+
+## EDA Server Enhancement Report
+
+This document summarizes each module and logic step implemented in the EDA server, with concise reasoning and the key mathematical formulas used.
+
+---
+
+### 1. Configuration Centralization
+
+**Reasoning:** Centralize all tunable thresholds and parameters for easy maintenance and validation.
+**Math/Config:** e.g. `column_drop_threshold = 0.50` → drop if `missing_pct > 0.50`.
+
+**Implementation:**
+- **`config.yaml`**: Centralized configuration file with all thresholds
+- **`config.py`**: Type-safe configuration loader with Pydantic validation
+- **Benefits**: Easy tuning, validation, and maintenance of all parameters
+
+### 2. `load_data`
+
+**Reasoning:** Report dataset dimensions and memory footprint to anticipate performance issues.
+**Math:** `memory_mb = df.memory_usage(deep=True).sum() / 1024**2`.
+
+**Features:**
+- Memory usage reporting with human-readable formatting
+- Support for CSV, Excel, and JSON formats
+- Error handling for missing files and unsupported formats
+
+### 3. `basic_info`
+
+**Reasoning:** Provide immediate context on shape, dtypes, and sample rows for rapid dataset familiarization.
+
+**Output:**
+- Dataset shape and dimensions
+- Column data types
+- First five rows for quick inspection
+
+### 4. `missing_data_analysis`
+
+**Reasoning:** Quantify, visualize, and diagnose missingness patterns before imputation.
+**Math:**
+
+* Missing count per column: `m_c = Σ 1_{isnull}`
+* Missing percentage: `p_c = (m_c / N) × 100`
+* Drop threshold: `p_c > 0.50`
+* Little's test χ²: `χ² = Σ (O−E)²/E` for MCAR detection.
+
+**Steps:**
+1. **Missing Data Clustering**: Analyze patterns across columns
+2. **Thresholded Column Dropping**: Identify columns with >50% missing data
+3. **Missingness Mechanism Analysis**: MCAR/MAR/MNAR detection via Little's test
+4. **Row-wise Missing Analysis**: Identify problematic records
+5. **Imputation Strategy Analysis**: Median vs mean based on skewness, mode for categoricals
+6. **Data Quality Impact Assessment**: Overall quality scoring
+
+### 5. `create_visualization`
+
+**Reasoning:** Guard plot types by dtype and annotate with correlation values for interpretability.
+**Math:** Heatmap label: `corr_{ij} = Cov(X_i,X_j)/(σ_i σ_j)`.
+
+**Supported plots:**
+- **Histogram**: For numeric columns with density estimation
+- **Boxplot**: With outlier highlighting
+- **Scatter**: For numeric pairs with correlation analysis
+- **Correlation**: Heatmap with coefficient labels
+- **Missing**: Missing data pattern matrix
+
+### 6. `statistical_summary`
+
+**Reasoning:** Summarize descriptive stats and sample large datasets to control O(N²) correlation cost.
+
+**Features:**
+- Automatic sampling for datasets >10,000 rows
+- Comprehensive descriptive statistics
+- Correlation matrix with performance optimization
+
+### 7. `list_datasets`
+
+**Reasoning:** Enumerate loaded datasets and shapes to manage workspace state.
+
+**Output:**
+- Dataset names and shapes
+- Memory usage information
+- Quick workspace overview
+
+### 8. `infer_schema`
+
+**Reasoning:** Auto-detect types, ranges, patterns, and IDs to generate a formal schema contract.
+**Math/Heuristics:**
+
+* Uniqueness ratio: `u = unique_count / N`
+* ID if `u ≥ 0.90` or matches `UUID` regex.
+* Datetime parse success: `success_rate ≥ 0.80`.
+
+**Detection Features:**
+- **Type Inference**: number, string, datetime with precision/scale
+- **Pattern Detection**: email, url, phone, date, uuid, credit_card, postal_code, ip_address
+- **ID Detection**: Uniqueness ratio + naming patterns
+- **Datetime Inference**: Automatic parsing with success rate validation
+- **YAML Contract**: Formal schema specification
+
+### 9. `detect_outliers`
+
+**Reasoning:** Combine univariate (IQR), model-based (IF/LOF), and multivariate (Mahalanobis) detection for robust anomaly identification.
+**Math:**
+
+* IQR bounds: `LB = Q1 − 1.5·IQR`, `UB = Q3 + 1.5·IQR`
+* Mahalanobis: `d² = (x−μ)^T Σ^{−1}(x−μ)`, outlier if `d² > χ²_{p,0.975}`.
+
+**Methods:**
+1. **IQR Method**: Standard statistical outlier detection
+2. **Isolation Forest**: Model-based anomaly detection
+3. **Local Outlier Factor**: Density-based outlier detection
+4. **Mahalanobis Distance**: Multivariate outlier detection
+
+**Visualizations:**
+- Histogram + KDE with outlier highlighting
+- Boxplot with outlier points
+- Distribution analysis with skewness/kurtosis
+
+### 10. `feature_transformation`
+
+**Reasoning:** Normalize skew, discretize, and reduce cardinality to improve model readiness.
+**Math:**
+
+* Box–Cox: `x' = (x^λ−1)/λ` or `ln(x)` if `λ=0` (shift x>0)
+* Log: `x' = ln(x + shift)` where `shift = max(0, 1−min(x))`
+* Quantile binning: `bins = qcut(x, q=n_bins)`
+* Rare grouping: category if `freq < 0.005`
+* VIF: `VIF_i = 1/(1−R_i²)`.
+
+**Transformations:**
+1. **Box-Cox Transformation**: Normalize skewed data with automatic shifting
+2. **Log Transformation**: Handle right-skewed data with shift calculation
+3. **Quantile Binning**: Discretize numeric variables
+4. **Cardinality Reduction**: Group rare categories (0.5% threshold)
+5. **VIF Analysis**: Detect multicollinearity
+6. **Supervised Discretization**: Target-guided binning for classification
+
+### 11. Configuration Loader & `utils.py`
+
+**Reasoning:** Abstract repeated logic (e.g. skew, VIF, sampling) into reusable functions for DRY code and testability.
+
+**Key Utilities:**
+- `calculate_skewness()` / `calculate_kurtosis()` with edge case handling
+- `get_numeric_columns()` / `get_categorical_columns()` with exclusions
+- `calculate_missing_stats()` for comprehensive missing data analysis
+- `detect_id_columns()` / `infer_datetime_columns()` for schema inference
+- `create_quantile_bins()` with fallback strategies
+- `calculate_vif_scores()` for multicollinearity detection
+- `sample_dataframe()` for large dataset handling
+- `format_memory_usage()` for human-readable memory reporting
+
+### 12. Interactive Checkpoints
+
+**Reasoning:** Require explicit human approval for destructive or model-sensitive steps, with configurable timeouts.
+
+**Features:**
+- **CheckpointManager**: Centralized approval management
+- **Specialized Functions**: Missing data, outlier detection, transformation, schema approval
+- **Auto-approval**: Small changes automatically approved
+- **Timeout Handling**: Configurable approval timeouts
+- **Message Formatting**: Standardized checkpoint messages
+- **Enable/Disable**: Toggle checkpoints for automated vs interactive processing
+
+### 13. Unit Testing
+
+**Reasoning:** Ensure correctness across edge cases (empty, constant, large datasets) and prevent regressions via automated tests.
+
+**Test Coverage:**
+- **Edge Cases**: All-missing data, constant columns, single values, large datasets
+- **Core Functionality**: Data loading, missing analysis, outlier detection, schema inference
+- **Configuration**: Validation, defaults, error handling
+- **Utilities**: Quantile binning, VIF calculation, memory formatting
+- **Concurrent Access**: Multiple simultaneous operations
+- **Pattern Detection**: Email, phone, date, UUID patterns
+
+---
+
+*All formulas and thresholds align with **Introduction to Data Mining** best practices, ensuring transparent, auditable, and mathematically precise EDA workflows.*
 
 ## Roadmap & Next Steps
 
 * **Phase 3 cont'd**: add `train_model` (sklearn/XGBoost → MLflow) & `predict` tool.
 * **Phase 4**: HTTP/SSE exposure (`mcp run server.py --port 8000`), Docker + CI, ArgoCD deployment.
 * **Phase 5**: implement `drift_watcher`, Slack/email alerts when thresholds breach.
+
+**Immediate Enhancements:**
+- **Performance Profiling**: Add profiling for very wide/tall datasets
+- **Asynchronous Processing**: Implement chunked processing for large datasets
+- **Advanced Visualizations**: Add more sophisticated plotting options
+- **Model Integration**: Add model training and prediction capabilities
+- **Alerting System**: Implement drift and quality alerts
 
 Contributions and improvements are welcome—see [Contributing](#development--contributing) below.
 
@@ -764,6 +1156,34 @@ Contributions and improvements are welcome—see [Contributing](#development--co
 4. Submit a PR for review
 
 All code is linted with `ruff` + `black`, type-checked with `mypy`.
+
+### Development Setup
+
+```bash
+# Install development dependencies
+uv pip install .[dev]
+
+# Run linting
+ruff check .
+black .
+
+# Run type checking
+mypy server.py config.py utils.py checkpoints.py
+
+# Run tests
+pytest test_eda.py -v
+
+# Run tests with coverage
+pytest test_eda.py --cov=server --cov=utils --cov=config --cov-report=html
+```
+
+### Code Style
+
+- **Type Hints**: Use type hints for all function parameters and return values
+- **Docstrings**: Include detailed docstrings with examples
+- **Error Handling**: Use proper exception handling with informative messages
+- **Testing**: Write tests for all new functionality and edge cases
+- **Configuration**: Add new parameters to `config.yaml` with validation
 
 ## License
 
