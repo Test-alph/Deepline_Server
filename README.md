@@ -56,6 +56,7 @@ By the end of Phase 3, the server supports:
 ## Prerequisites
 
 * **Python ≥ 3.12** (pyenv recommended for version management)
+  * **Tested with**: Python 3.12.3 (pyenv)
 * **uv** for environment & dependency management
 * **MCP CLI** (provided by `mcp[cli]`)
 * **Claude Desktop** (for MCP integration)
@@ -81,11 +82,11 @@ By the end of Phase 3, the server supports:
 
    ```bash
    uv pip install \
-     "mcp[cli]" pandas numpy polars pyarrow \
-     matplotlib seaborn plotly scipy scikit-learn \
-     ydata-profiling missingno \
-     xgboost ipykernel mlflow \
-     evidently python-dateutil pyod
+     "mcp[cli]==1.10.1" "pandas==2.3.0" "numpy==2.1.3" "pyarrow==20.0.0" \
+     "matplotlib==3.10.0" "seaborn==0.13.2" "plotly==5.24.1" "scipy==1.15.3" "scikit-learn==1.7.0" \
+     "ydata-profiling==4.16.1" "missingno==0.5.2" \
+     "evidently==0.7.9" "python-dateutil==2.9.0.post0" "pyod==2.0.5" \
+     "pydantic==2.11.7"
    ```
 
 4. **Lock dependencies** for reproducibility:
@@ -94,6 +95,11 @@ By the end of Phase 3, the server supports:
    uv pip compile pyproject.toml \
      --output-file requirements.lock \
      --generate-hashes
+   ```
+
+   **Alternative**: Use exact versions for guaranteed reproducibility:
+   ```bash
+   pip install -r requirements-exact.txt
    ```
 
 5. *(Optional)* **Install dev tools**:
@@ -106,8 +112,8 @@ By the end of Phase 3, the server supports:
 
    ```bash
    which python && python -V
-   pip list | grep evidently
-   python -c "import missingno, evidently, dateutil, pyod; print('All dependencies available')"
+   pip list | grep -E "(evidently|missingno|dateutil|pyod|pandas|numpy)"
+   python -c "import missingno, evidently, dateutil, pyod, pandas, numpy; print('All core dependencies available')"
    ```
 
 ## Dependencies & Libraries
@@ -115,45 +121,49 @@ By the end of Phase 3, the server supports:
 ### Core Framework
 | Library | Version | Purpose |
 |---------|---------|---------|
-| **mcp[cli]** | Latest | Model Context Protocol framework for tool registration and server management |
-| **pydantic** | Latest | Data validation and settings management for structured outputs |
+| **mcp[cli]** | 1.10.1 | Model Context Protocol framework for tool registration and server management |
+| **pydantic** | 2.11.7 | Data validation and settings management for structured outputs |
 | **asyncio** | Built-in | Asynchronous programming for concurrent tool execution |
 
 ### Data Processing & Analysis
 | Library | Version | Purpose |
 |---------|---------|---------|
-| **pandas** | Latest | Primary data manipulation and analysis library |
-| **numpy** | Latest | Numerical computing and array operations |
-| **polars** | Latest | Fast DataFrame library for large datasets |
-| **pyarrow** | Latest | Columnar data format for efficient data storage |
+| **pandas** | 2.3.0 | Primary data manipulation and analysis library |
+| **numpy** | 2.1.3 | Numerical computing and array operations |
+| **pyarrow** | 20.0.0 | Columnar data format for efficient data storage |
 
 ### Data Science & Machine Learning
 | Library | Version | Purpose |
 |---------|---------|---------|
-| **scikit-learn** | Latest | Machine learning algorithms for classification, regression, and clustering |
-| **scipy** | Latest | Scientific computing and statistical functions |
-| **xgboost** | Latest | Gradient boosting framework for ML models |
-| **pyod** | Latest | Outlier detection algorithms (Isolation Forest, Local Outlier Factor) |
+| **scikit-learn** | 1.7.0 | Machine learning algorithms for classification, regression, and clustering |
+| **scipy** | 1.15.3 | Scientific computing and statistical functions |
+| **pyod** | 2.0.5 | Outlier detection algorithms (Isolation Forest, Local Outlier Factor) |
 
 ### Data Quality & Monitoring
 | Library | Version | Purpose |
 |---------|---------|---------|
-| **evidently** | 0.7+ | Data quality, drift detection, and model performance monitoring |
-| **ydata-profiling** | Latest | Automated data profiling and quality assessment |
-| **missingno** | Latest | Missing data visualization and analysis |
+| **evidently** | 0.7.9 | Data quality, drift detection, and model performance monitoring |
+| **ydata-profiling** | 4.16.1 | Automated data profiling and quality assessment |
+| **missingno** | 0.5.2 | Missing data visualization and analysis |
 
 ### Visualization
 | Library | Version | Purpose |
 |---------|---------|---------|
-| **matplotlib** | Latest | Core plotting library for static visualizations |
-| **seaborn** | Latest | Statistical data visualization built on matplotlib |
-| **plotly** | Latest | Interactive plotting for web-based visualizations |
+| **matplotlib** | 3.10.0 | Core plotting library for static visualizations |
+| **seaborn** | 0.13.2 | Statistical data visualization built on matplotlib |
+| **plotly** | 5.24.1 | Interactive plotting for web-based visualizations |
 
 ### Development & Environment
 | Library | Version | Purpose |
 |---------|---------|---------|
 | **uv** | Latest | Fast Python package installer and resolver |
-| **python-dateutil** | Latest | Date parsing and manipulation utilities |
+| **python-dateutil** | 2.9.0.post0 | Date parsing and manipulation utilities |
+
+### Optional Dependencies (Not Currently Installed)
+| Library | Version | Purpose |
+|---------|---------|---------|
+| **polars** | Latest | Fast DataFrame library for large datasets |
+| **xgboost** | Latest | Gradient boosting framework for ML models |
 | **ipykernel** | Latest | Jupyter kernel for interactive development |
 | **mlflow** | Latest | Machine learning lifecycle management |
 
@@ -205,6 +215,24 @@ By the end of Phase 3, the server supports:
 - **PostgreSQL/MySQL**: Database integration for persistent storage
 - **Redis**: Caching for improved performance
 - **Slack/Email**: Alerting for drift detection and quality issues
+
+### Version Compatibility Notes
+
+**Tested Environment**:
+- **Python**: 3.12.3 (pyenv)
+- **OS**: macOS 14.5.0 (Darwin)
+- **Package Manager**: uv (latest)
+
+**Key Version Dependencies**:
+- **evidently 0.7.9**: Compatible with our drift detection and quality reporting tools
+- **pandas 2.3.0**: Required for DataFrame operations and type inference
+- **pyod 2.0.5**: Required for model-based outlier detection (Isolation Forest, LOF)
+- **scikit-learn 1.7.0**: Used for classification metrics and statistical outlier detection
+
+**Known Working Combinations**:
+- All listed versions have been tested together and work correctly
+- The `requirements-exact.txt` file ensures reproducible builds
+- Optional dependencies can be added without affecting core functionality
 
 ## Directory Structure
 
