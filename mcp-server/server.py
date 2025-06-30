@@ -21,6 +21,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import missingno as msno
+import seaborn as sns
 
 from mcp.server import FastMCP
 from mcp.types import TextContent, ImageContent
@@ -85,6 +86,11 @@ class OutlierPayload(BaseModel):
 class OutlierResult(BaseModel):
     result: OutlierPayload
     image_uri: str
+
+# --- Target analysis models -------------------------------------------------
+class TargetAnalysisResult(BaseModel):
+    result: dict
+    plots: dict[str, str]
 
 # --- Evidently helpers ------------------------------------------------------
 REPORT_DIR = Path("reports")
@@ -211,28 +217,69 @@ async def create_visualization(
         raise KeyError(f"Dataset '{name}' not found.")
 
     plt.figure(figsize=(10, 6))
+    
     if kind == "histogram" and x:
+        if x not in df.columns:
+            raise KeyError(f"Column '{x}' not found in dataset.")
+        if not pd.api.types.is_numeric_dtype(df[x]):
+            raise ValueError(f"Column '{x}' must be numeric for histogram.")
         plt.hist(df[x].dropna(), bins=30, alpha=0.7)
         plt.title(f"Histogram – {x}")
-    elif kind == "boxplot" and x:
-        plt.boxplot(df[x].dropna())
-        plt.title(f"Boxplot – {x}")
+        plt.xlabel(x)
+        plt.ylabel("Frequency")
+        
+    elif kind == "boxplot":
+        if not x:
+            raise ValueError("Boxplot requires 'x' parameter.")
+        if x not in df.columns:
+            raise KeyError(f"Column '{x}' not found in dataset.")
+        
+        if y and y in df.columns:
+            # Boxplot with categorical x and numeric y
+            if not pd.api.types.is_numeric_dtype(df[y]):
+                raise ValueError(f"Column '{y}' must be numeric for boxplot.")
+            sns.boxplot(data=df, x=x, y=y)
+            plt.title(f"Boxplot – {y} by {x}")
+        else:
+            # Simple boxplot of single column
+            if not pd.api.types.is_numeric_dtype(df[x]):
+                raise ValueError(f"Column '{x}' must be numeric for single-column boxplot.")
+            plt.boxplot(df[x].dropna())
+            plt.title(f"Boxplot – {x}")
+            plt.ylabel(x)
+            
     elif kind == "scatter" and x and y:
+        if x not in df.columns or y not in df.columns:
+            raise KeyError(f"Columns '{x}' and/or '{y}' not found in dataset.")
+        if not pd.api.types.is_numeric_dtype(df[x]) or not pd.api.types.is_numeric_dtype(df[y]):
+            raise ValueError(f"Both columns '{x}' and '{y}' must be numeric for scatter plot.")
         plt.scatter(df[x], df[y], alpha=0.6)
         plt.title(f"Scatter – {x} vs {y}")
+        plt.xlabel(x)
+        plt.ylabel(y)
+        
     elif kind == "correlation":
-        corr = df.select_dtypes(np.number).corr()
+        numeric_df = df.select_dtypes(include=[np.number])
+        if numeric_df.empty:
+            raise ValueError("No numeric columns found for correlation matrix.")
+        corr = numeric_df.corr()
         plt.imshow(corr, cmap="coolwarm", aspect="auto")
         plt.colorbar()
-        plt.title("Correlation matrix")
+        plt.title("Correlation Matrix")
+        plt.xticks(range(len(corr.columns)), corr.columns, rotation=45)
+        plt.yticks(range(len(corr.columns)), corr.columns)
+        
     elif kind == "missing":
         msno.matrix(df)
-        plt.title(f"Missing pattern – {name}")
+        plt.title(f"Missing Data Pattern – {name}")
+        
     else:
-        raise ValueError("Invalid parameters for visualization.")
+        raise ValueError(f"Invalid visualization type '{kind}' or missing required parameters.")
 
+    plt.tight_layout()
     img_b64 = _fig_to_base64_png()
     plt.close()
+    
     return [
         TextContent(type="text", text=f"{kind.capitalize()} plot created."),
         ImageContent(type="image", data=img_b64, mimeType="image/png"),
@@ -482,6 +529,203 @@ async def detect_outliers(
     )
 
 
+@mcp.tool(structured_output=True)
+async def target_analysis(name: str, target_col: str) -> TargetAnalysisResult:
+    """
+    Analyze target column for classification vs regression, compute priors/skewness,
+    and find top correlated features. Returns structured analysis with visualizations.
+    """
+    async with store_lock:
+        df = data_store.get(name)
+    if df is None:
+        raise KeyError(f"Dataset '{name}' not found.")
+    
+    if target_col not in df.columns:
+        raise KeyError(f"Target column '{target_col}' not found in dataset '{name}'.")
+    
+    # Step 1: Load & Inspect Target Column
+    series = df[target_col]
+    n_unique = series.nunique()
+    is_numeric = pd.api.types.is_numeric_dtype(series)
+    
+    # Branch Logic: Classification vs Regression
+    is_classification = not is_numeric or n_unique <= 20
+    
+    result = {}
+    plots = {}
+    
+    if is_classification:
+        # Step 2: Classification Flow
+        
+        # 2.1 Compute Priors
+        counts = series.value_counts()
+        pcts = (counts / len(series) * 100).round(2)
+        
+        result.update({
+            "task_type": "classification",
+            "n_classes": n_unique,
+            "counts": counts.to_dict(),
+            "percentages": pcts.to_dict(),
+            "imbalance_ratio": counts.max() / counts.min() if len(counts) > 1 else 1.0
+        })
+        
+        # 2.2 Visualize Distribution (Bar chart)
+        plt.figure(figsize=(10, 6))
+        counts.plot(kind='bar')
+        plt.title(f"Target Distribution - {target_col}")
+        plt.xlabel("Class")
+        plt.ylabel("Count")
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        
+        bar_path = REPORT_DIR / f"target_bar_{name}_{target_col}.png"
+        plt.savefig(bar_path, dpi=150, bbox_inches="tight")
+        plt.close()
+        plots["bar_uri"] = f"file://{bar_path.resolve()}"
+        
+        # 2.3 Human Checkpoint Message
+        print(f"\n=== CLASSIFICATION ANALYSIS CHECKPOINT ===")
+        print(f"Target column: {target_col}")
+        print(f"Classes: {list(counts.index)}")
+        print(f"Counts: {counts.to_dict()}")
+        print(f"Imbalance ratio: {result['imbalance_ratio']:.2f}")
+        print(f"Please verify the labels and imbalance ratio before proceeding.")
+        print(f"Bar chart saved to: {bar_path}")
+        print(f"==========================================\n")
+        
+    else:
+        # Step 3: Regression Flow
+        
+        # 3.1 Univariate Summary
+        skew = series.skew()
+        kurt = series.kurtosis()
+        
+        result.update({
+            "task_type": "regression",
+            "skewness": round(skew, 3),
+            "kurtosis": round(kurt, 3),
+            "mean": round(series.mean(), 3),
+            "std": round(series.std(), 3),
+            "min": round(series.min(), 3),
+            "max": round(series.max(), 3),
+            "needs_transform": abs(skew) > 2
+        })
+        
+        # 3.2 Visualize Distribution (Histogram + Q-Q plot)
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+        
+        # Histogram
+        ax1.hist(series.dropna(), bins=30, alpha=0.7, edgecolor='black')
+        ax1.set_title(f"Target Distribution - {target_col}")
+        ax1.set_xlabel(target_col)
+        ax1.set_ylabel("Frequency")
+        ax1.axvline(series.mean(), color='red', linestyle='--', label=f'Mean: {series.mean():.2f}')
+        ax1.legend()
+        
+        # Q-Q plot
+        from scipy import stats
+        stats.probplot(series.dropna(), dist="norm", plot=ax2)
+        ax2.set_title("Q-Q Plot vs Normal Distribution")
+        
+        plt.tight_layout()
+        
+        hist_path = REPORT_DIR / f"target_hist_{name}_{target_col}.png"
+        plt.savefig(hist_path, dpi=150, bbox_inches="tight")
+        plt.close()
+        plots["hist_uri"] = f"file://{hist_path.resolve()}"
+        
+        # 3.3 Human Checkpoint Message
+        print(f"\n=== REGRESSION ANALYSIS CHECKPOINT ===")
+        print(f"Target column: {target_col}")
+        print(f"Skewness: {skew:.3f} {'(needs transform)' if abs(skew) > 2 else '(OK)'}")
+        print(f"Kurtosis: {kurt:.3f}")
+        print(f"Mean: {series.mean():.3f}, Std: {series.std():.3f}")
+        print(f"Range: {series.min():.3f} to {series.max():.3f}")
+        print(f"Please verify the distribution and consider transformation if skew > 2.")
+        print(f"Histogram and Q-Q plot saved to: {hist_path}")
+        print(f"=====================================\n")
+    
+    # Step 4: Feature-Target Correlation
+    # Get numeric features (excluding target)
+    numeric_features = df.select_dtypes(include=[np.number]).columns.tolist()
+    if target_col in numeric_features:
+        numeric_features.remove(target_col)
+    
+    if numeric_features:
+        correlations = []
+        
+        for feature in numeric_features:
+            if is_classification:
+                # For classification, use point-biserial correlation (special case of Pearson)
+                if n_unique == 2:
+                    # Binary classification
+                    corr = df[feature].corr(series.astype(int))
+                else:
+                    # Multi-class: use correlation with numeric encoding
+                    corr = df[feature].corr(pd.Series(pd.Categorical(series).codes, index=series.index))
+            else:
+                # For regression, use Pearson correlation
+                corr = df[feature].corr(series)
+            
+            if not pd.isna(corr):
+                correlations.append({
+                    "feature": feature,
+                    "rho": round(corr, 3),
+                    "abs_rho": abs(corr)
+                })
+        
+        # Sort by absolute correlation and take top 10
+        correlations.sort(key=lambda x: x["abs_rho"], reverse=True)
+        top_features = correlations[:10]
+        
+        result["top_features"] = top_features
+        
+        # 4.3 Visual Confirmation (Scatter plots for top 3)
+        if len(top_features) >= 3:
+            fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+            
+            for i, feat_info in enumerate(top_features[:3]):
+                feature = feat_info["feature"]
+                rho = feat_info["rho"]
+                x = df[feature]
+                if is_classification:
+                    # Use numeric codes for target
+                    y = pd.Series(pd.Categorical(series).codes, index=series.index)
+                else:
+                    y = series
+                axes[i].scatter(x, y, alpha=0.6, s=20)
+                axes[i].set_xlabel(feature)
+                axes[i].set_ylabel(target_col)
+                axes[i].set_title(f"{feature} vs {target_col}\nρ = {rho:.3f}")
+                # Add trend line only if both x and y are numeric
+                if pd.api.types.is_numeric_dtype(x) and pd.api.types.is_numeric_dtype(y):
+                    try:
+                        z = np.polyfit(x.dropna(), y.dropna(), 1)
+                        p = np.poly1d(z)
+                        axes[i].plot(x, p(x), "r--", alpha=0.8)
+                    except Exception:
+                        pass
+            
+            plt.tight_layout()
+            
+            scatter_path = REPORT_DIR / f"target_scatter_{name}_{target_col}.png"
+            plt.savefig(scatter_path, dpi=150, bbox_inches="tight")
+            plt.close()
+            plots["scatter_uri"] = f"file://{scatter_path.resolve()}"
+        
+        # 4.4 Human Checkpoint Message
+        print(f"\n=== CORRELATION ANALYSIS CHECKPOINT ===")
+        print(f"Top 10 features by absolute correlation:")
+        for i, feat in enumerate(top_features[:10], 1):
+            print(f"{i:2d}. {feat['feature']:15s} | ρ = {feat['rho']:6.3f}")
+        print(f"Please verify these make sense (no ID leakage, no spurious spikes).")
+        if len(top_features) >= 3:
+            print(f"Scatter plots for top 3 saved to: {scatter_path}")
+        print(f"========================================\n")
+    
+    return TargetAnalysisResult(result=result, plots=plots)
+
+
 class DataQualityReportResult(BaseModel):
     html_uri: str
 
@@ -532,7 +776,7 @@ async def drift_analysis(
     html = REPORT_DIR / f"drift_{baseline}_vs_{current}.html"
     snap.save_html(html)
 
-    summary = json.loads(snap.json)
+    summary = json.loads(snap.json())
     # Find the DriftedColumnsCount metric
     drift_metric = next(
         (m["value"] for m in summary["metrics"]
@@ -565,11 +809,11 @@ async def model_performance_report(
     if model_type.startswith("reg"):
         df = pd.DataFrame({"target": y_true, "prediction": y_pred})
         rpt = Report([RegressionPreset()])
-        snap = await asyncio.to_thread(rpt.run, _ds(df))
+        snap = await asyncio.to_thread(rpt.run, _ds_regression(df))
         html = REPORT_DIR / f"perf_regression_{len(df)}.html"
         snap.save_html(html)
 
-        summary = json.loads(snap.json)
+        summary = json.loads(snap.json())
         # Extract common regression metrics: RMSE, MAE, R2
         metrics = {}
         for m in summary["metrics"]:

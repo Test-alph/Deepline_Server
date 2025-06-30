@@ -52,6 +52,7 @@ By the end of Phase 3, the server supports:
 3. **Drift detection** (report drift count/share)
 4. **Regression metrics** (RMSE, MAE, R²)
 5. **Classification metrics** (accuracy, precision, recall, F1-weighted)
+6. **Target Analysis** (automated, human-in-the-loop target column analysis)
 
 ## Prerequisites
 
@@ -204,6 +205,12 @@ By the end of Phase 3, the server supports:
 - **scikit-learn**: Classification metrics (accuracy, precision, recall, F1)
 - **numpy**: Statistical calculations
 
+#### Target Analysis (`target_analysis`)
+- **pandas**: Target column inspection, type inference, and correlation
+- **matplotlib**: Bar charts, histograms, Q–Q plots, scatter plots
+- **scipy**: Q–Q plot and distributional checks
+- **numpy**: Correlation and summary statistics
+
 ### System Requirements
 - **Python**: ≥ 3.12 (pyenv recommended)
 - **Memory**: Minimum 4GB RAM (8GB+ recommended for large datasets)
@@ -241,6 +248,7 @@ mcp-server/
 ├── .venv/                  # Local virtual environment
 ├── pyproject.toml         # Project config & dependencies
 ├── requirements.lock      # Hash-pinned lockfile
+├── requirements-exact.txt # Exact pinned versions for reproducibility
 ├── server.py              # FastMCP server implementation
 ├── launch_server.py       # Environment-aware launcher script
 ├── test_evidently_tools.py # Comprehensive test harness
@@ -284,6 +292,7 @@ mcp-server/
 | **`list_datasets`**         | List dataset names with row/column counts                        |
 | **`infer_schema`**          | Infer column types, nullability, ranges, and patterns            |
 | **`detect_outliers`**       | Detect outliers using IQR, Isolation Forest, or Local Outlier Factor |
+| **`target_analysis`**       | Automated, human-in-the-loop target column analysis (classification/regression, priors, skew, top features, and visualizations) |
 
 ### Phase 2 – Quality Gate Tools
 
