@@ -9,11 +9,13 @@ Tools:
 • create_visualization
 • statistical_summary
 • list_datasets
+• infer_schema
+• detect_outliers
 """
 
-from typing import Dict
+from typing import Dict, Literal
 from pathlib import Path
-import io, base64, tempfile, asyncio, json
+import io, base64, tempfile, asyncio, json, re
 
 import pandas as pd
 import numpy as np
@@ -40,12 +42,49 @@ from sklearn.metrics import (
     r2_score,
 )
 
+# Try to import pyod for outlier detection
+try:
+    from pyod.models.iforest import IsolationForest
+    from pyod.models.lof import LOF
+    PYOD_AVAILABLE = True
+except ImportError:
+    PYOD_AVAILABLE = False
+    print("Warning: pyod not available. Model-based outlier detection will not work.")
+
 # Initialize FastMCP server
 mcp = FastMCP("data-science-eda")
 
 # Data store and lock for thread safety
 data_store: Dict[str, pd.DataFrame] = {}
 store_lock = asyncio.Lock()
+
+# --- Schema inference models -------------------------------------------------
+class SchemaColumn(BaseModel):
+    name: str
+    type: str  # "number", "datetime", "string"
+    nullable: bool
+    min_value: float | None = None
+    max_value: float | None = None
+    pattern: str | None = None
+    max_length: int | None = None
+    unique_count: int | None = None
+    sample_values: list | None = None
+
+class SchemaResult(BaseModel):
+    dataset_name: str
+    columns: list[SchemaColumn]
+    total_rows: int
+    total_columns: int
+
+# --- Outlier detection models -------------------------------------------------
+class OutlierPayload(BaseModel):
+    outliers: dict[str, list[int]]
+    counts: dict[str, int]
+    total_rows: int
+
+class OutlierResult(BaseModel):
+    result: OutlierPayload
+    image_uri: str
 
 # --- Evidently helpers ------------------------------------------------------
 REPORT_DIR = Path("reports")
@@ -231,6 +270,216 @@ async def list_datasets() -> str:
             for name, df in data_store.items()
         ]
     return "Datasets:\n" + "\n".join(lines)
+
+
+@mcp.tool(structured_output=True)
+async def infer_schema(name: str) -> SchemaResult:
+    """
+    Infer schema for a dataset including column types, nullability, ranges, and patterns.
+    Returns structured schema information.
+    """
+    async with store_lock:
+        df = data_store.get(name)
+    if df is None:
+        raise KeyError(f"Dataset '{name}' not found.")
+
+    columns = []
+    
+    for col_name in df.columns:
+        col_data = df[col_name]
+        
+        # Basic info
+        nullable = col_data.isnull().any()
+        unique_count = col_data.nunique()
+        
+        # Sample values (first 5 non-null)
+        sample_values = col_data.dropna().head(5).tolist()
+        
+        # Type inference
+        dtype = col_data.dtype
+        
+        if pd.api.types.is_numeric_dtype(dtype):
+            col_type = "number"
+            min_value = float(col_data.min()) if not col_data.empty else None
+            max_value = float(col_data.max()) if not col_data.empty else None
+            pattern = None
+            max_length = None
+            
+        elif pd.api.types.is_datetime64_any_dtype(dtype):
+            col_type = "datetime"
+            min_value = None
+            max_value = None
+            pattern = None
+            max_length = None
+            
+        else:
+            col_type = "string"
+            min_value = None
+            max_value = None
+            
+            # String pattern analysis
+            str_data = col_data.astype(str)
+            max_length = int(str_data.str.len().max()) if not str_data.empty else None
+            
+            # Simple pattern detection
+            pattern = None
+            if not str_data.empty:
+                # Check for email pattern
+                email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+                email_matches = str_data.str.match(email_pattern, na=False)
+                if email_matches.sum() > len(str_data) * 0.8:  # 80% match rate
+                    pattern = "email"
+                # Check for URL pattern
+                elif str_data.str.contains(r'^https?://', na=False).sum() > len(str_data) * 0.8:
+                    pattern = "url"
+                # Check for phone pattern
+                elif str_data.str.match(r'^[\d\s\-\(\)\+]+$', na=False).sum() > len(str_data) * 0.8:
+                    pattern = "phone"
+                # Check for date pattern
+                elif str_data.str.match(r'^\d{4}-\d{2}-\d{2}$', na=False).sum() > len(str_data) * 0.8:
+                    pattern = "date"
+        
+        column = SchemaColumn(
+            name=col_name,
+            type=col_type,
+            nullable=nullable,
+            min_value=min_value,
+            max_value=max_value,
+            pattern=pattern,
+            max_length=max_length,
+            unique_count=unique_count,
+            sample_values=sample_values
+        )
+        columns.append(column)
+    
+    return SchemaResult(
+        dataset_name=name,
+        columns=columns,
+        total_rows=len(df),
+        total_columns=len(df.columns)
+    )
+
+
+@mcp.tool(structured_output=True)
+async def detect_outliers(
+    name: str,
+    method: Literal["iqr", "isolation_forest", "lof"] = "iqr",
+    factor: float = 1.5,
+    contamination: float = 0.05,
+    sample_size: int = 10_000
+) -> OutlierResult:
+    """
+    Detect outliers in numeric columns using IQR, Isolation Forest, or Local Outlier Factor.
+    Returns structured outlier information and visualization.
+    """
+    async with store_lock:
+        df = data_store.get(name)
+    if df is None:
+        raise KeyError(f"Dataset '{name}' not found.")
+
+    # Step 1: Identify numeric features
+    num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    if not num_cols:
+        raise ValueError("No numeric columns to analyze")
+
+    outliers = {}
+    total_rows = len(df)
+
+    # Step 2: Full-data outlier detection
+    if method == "iqr":
+        # IQR method - column by column
+        for col in num_cols:
+            Q1, Q3 = df[col].quantile([0.25, 0.75])
+            IQR = Q3 - Q1
+            lower = Q1 - factor * IQR
+            upper = Q3 + factor * IQR
+            outlier_indices = df[(df[col] < lower) | (df[col] > upper)].index.tolist()
+            outliers[col] = outlier_indices
+
+    elif method in ["isolation_forest", "lof"]:
+        if not PYOD_AVAILABLE:
+            raise ValueError(f"Model-based outlier detection requires pyod. Install with: pip install pyod")
+        
+        # Model-based methods - row-level detection
+        try:
+            if method == "isolation_forest":
+                model = IsolationForest(contamination=contamination, random_state=42)
+            else:  # lof
+                model = LOF(n_neighbors=20, contamination=contamination)
+            
+            # Fit and predict on numeric columns
+            model.fit(df[num_cols])
+            predictions = model.predict(df[num_cols])
+            
+            # Get outlier indices (-1 = outlier)
+            outlier_indices = np.where(predictions == -1)[0].tolist()
+            
+            # Attribute row-level flags to each column
+            for col in num_cols:
+                outliers[col] = outlier_indices
+                
+        except Exception as e:
+            print(f"Warning: Model-based outlier detection failed: {e}")
+            # Return empty outlier sets
+            for col in num_cols:
+                outliers[col] = []
+
+    # Step 3: Aggregate counts
+    counts = {col: len(outliers[col]) for col in num_cols}
+
+    # Step 4: Prepare data for plotting
+    plot_df = df if total_rows <= sample_size else df.sample(sample_size, random_state=42)
+
+    # Step 5: Build multi-subplot figure
+    n_cols = len(num_cols)
+    n_rows = (n_cols + 1) // 2  # 2 columns per row, round up
+    
+    fig, axes = plt.subplots(n_rows, 2, figsize=(12, 4 * n_rows))
+    if n_rows == 1:
+        axes = axes.reshape(1, -1)
+    
+    # Flatten axes for easier iteration
+    axes_flat = axes.flatten()
+    
+    for i, col in enumerate(num_cols):
+        ax = axes_flat[i]
+        
+        # Create boxplot without outliers (we'll add them manually)
+        box_data = plot_df[col].dropna()
+        bp = ax.boxplot(box_data, vert=False, showfliers=False)
+        
+        # Overlay real outliers on top
+        if outliers[col]:
+            outlier_values = df.loc[outliers[col], col].tolist()
+            ax.scatter(outlier_values, [1] * len(outlier_values), 
+                      color="red", alpha=0.6, s=20, label=f"Outliers ({len(outlier_values)})")
+        
+        ax.set_title(f"{col} - {method.upper()}")
+        ax.set_xlabel(col)
+        
+        # Add legend if there are outliers
+        if outliers[col]:
+            ax.legend()
+    
+    # Hide unused subplots
+    for i in range(len(num_cols), len(axes_flat)):
+        axes_flat[i].set_visible(False)
+    
+    plt.tight_layout()
+    
+    # Save to PNG
+    img_path = REPORT_DIR / f"outliers_{name}_{method}.png"
+    plt.savefig(img_path, dpi=150, bbox_inches="tight")
+    plt.close()
+
+    return OutlierResult(
+        result=OutlierPayload(
+            outliers=outliers,
+            counts=counts,
+            total_rows=total_rows
+        ),
+        image_uri=f"file://{img_path.resolve()}"
+    )
 
 
 class DataQualityReportResult(BaseModel):
