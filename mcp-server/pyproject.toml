@@ -38,6 +38,8 @@ dependencies = [
     # Development and experimentation
     "ipykernel",   # Jupyter kernel for interactive development
     "mlflow"       # ML lifecycle management and experiment tracking
+    # Environment variable loading
+    "python-dotenv"
 ]
 
 [project.optional-dependencies]
