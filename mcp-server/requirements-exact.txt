@@ -39,3 +39,6 @@ python-dateutil==2.9.0.post0
 # ruff==latest
 # mypy==latest
 # pytest==latest 
+
+# Environment Variable Management
+python-dotenv==1.0.1
