@@ -53,8 +53,17 @@ except ImportError:
     PYOD_AVAILABLE = False
     print("Warning: pyod not available. Model-based outlier detection will not work.")
 
-# Initialize FastMCP server
-mcp = FastMCP("data-science-eda")
+
+from dotenv import load_dotenv
+from typing import Dict, List
+import os
+
+load_dotenv()
+
+PORT = os.environ.get("PORT", 10000)
+
+# Create an MCP server
+mcp = FastMCP("data-science-eda", host="0.0.0.0", port=PORT)
 
 # Data store and lock for thread safety
 data_store: Dict[str, pd.DataFrame] = {}
