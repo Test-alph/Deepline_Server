@@ -1,18 +1,10 @@
-#!/usr/bin/env python3
-"""
-FastMCP server for Data-Science / EDA.
+from mcp.server.fastmcp import FastMCP
+from tavily import TavilyClient
+from dotenv import load_dotenv
+from typing import Dict, List
+import os
 
-Tools:
-• load_data
-• basic_info
-• missing_data_analysis
-• create_visualization
-• statistical_summary
-• list_datasets
-• infer_schema
-• detect_outliers
-"""
-
+from asyncio import Lock
 from typing import Dict, Literal
 from pathlib import Path
 import io, base64, tempfile, asyncio, json, re
@@ -53,22 +45,44 @@ except ImportError:
     PYOD_AVAILABLE = False
     print("Warning: pyod not available. Model-based outlier detection will not work.")
 
-
-from dotenv import load_dotenv
-from typing import Dict, List
-import os
-
 load_dotenv()
+
+if "TAVILY_API_KEY" not in os.environ:
+    raise Exception("TAVILY_API_KEY environment variable not set")
+  
+# Tavily API key
+TAVILY_API_KEY = os.environ["TAVILY_API_KEY"]
+
+# Initialize Tavily client
+tavily_client = TavilyClient(TAVILY_API_KEY)
 
 PORT = os.environ.get("PORT", 10000)
 
 # Create an MCP server
 mcp = FastMCP("data-science-eda", host="0.0.0.0", port=PORT)
 
-# Data store and lock for thread safety
+# Global shared in-memory store and lock
 data_store: Dict[str, pd.DataFrame] = {}
-store_lock = asyncio.Lock()
+store_lock = Lock()
 
+# Add a tool that uses Tavily
+@mcp.tool()
+def web_search(query: str) -> List[Dict]:
+    """
+    Use this tool to search the web for information.
+
+    Args:
+        query: The search query.
+
+    Returns:
+        The search results.
+    """
+    try:
+        response = tavily_client.search(query)
+        return response["results"]
+    except:
+        return "No results found"
+#######################################################
 # --- Schema inference models -------------------------------------------------
 class SchemaColumn(BaseModel):
     name: str
@@ -179,7 +193,6 @@ def _fig_to_base64_png() -> str:
     buf.seek(0)
     return base64.b64encode(buf.read()).decode()
 
-
 # ────────────────────────────────── Tools ──────────────────────────────────
 @mcp.tool()
 async def load_data(file_path: str, name: str) -> str:
@@ -229,7 +242,7 @@ async def basic_info(name: str) -> str:
     return info
 
 
-@mcp.tool(structured_output=True)
+@mcp.tool()
 async def missing_data_analysis(name: str) -> MissingDataResult:
     """
     Comprehensive missing data analysis with clustering, thresholded dropping, 
@@ -689,7 +702,7 @@ async def list_datasets() -> str:
     return "Datasets:\n" + "\n".join(lines)
 
 
-@mcp.tool(structured_output=True)
+@mcp.tool()
 async def infer_schema(name: str) -> SchemaResult:
     """
     Infer column types, nullability, numeric ranges, patterns (email, URL, phone, date),
@@ -994,7 +1007,7 @@ Please review the inferred schema and approve before proceeding.
     )
 
 
-@mcp.tool(structured_output=True)
+@mcp.tool()
 async def detect_outliers(
     name: str,
     method: Literal["iqr", "isolation_forest", "lof"] = "iqr",
@@ -1331,7 +1344,7 @@ Please review the outlier patterns and approve the recommended actions before pr
     )
 
 
-@mcp.tool(structured_output=True)
+@mcp.tool()
 async def feature_transformation(
     name: str,
     transformations: list[str] = ["boxcox", "log", "binning", "cardinality"],
@@ -1740,7 +1753,7 @@ Please review the transformations and approve before proceeding to modeling.
 class DataQualityReportResult(BaseModel):
     html_uri: str
 
-@mcp.tool(structured_output=True)
+@mcp.tool()
 async def data_quality_report(
     name: str,
     title: str | None = None,
@@ -1770,7 +1783,7 @@ class DriftAnalysisResult(BaseModel):
     drift_share: float
     html_uri: str
 
-@mcp.tool(structured_output=True)
+@mcp.tool()
 async def drift_analysis(
     baseline: str,
     current: str,
@@ -1806,7 +1819,7 @@ class ModelPerformanceReportResult(BaseModel):
     metrics: dict
     html_uri: str
 
-@mcp.tool(structured_output=True)
+@mcp.tool()
 async def model_performance_report(
     y_true: list[float | int],
     y_pred: list[float | int],
@@ -1877,7 +1890,7 @@ class DebugSummaryResult(BaseModel):
     keys: list[str]
     summary: dict
 
-@mcp.tool(structured_output=True)
+@mcp.tool()
 async def debug_drift_summary(
     baseline: str,
     current: str,
@@ -1904,7 +1917,7 @@ async def debug_drift_summary(
         summary=summary,
     )
 
-@mcp.tool(structured_output=True)
+@mcp.tool()
 async def debug_perf_summary(
     y_true: list[int | float],
     y_pred: list[int | float],
@@ -1932,7 +1945,7 @@ async def debug_perf_summary(
     )
 
 
-# ──────────────────────────────── Entrypoint ───────────────────────────────
+######################################################
+# Run the server
 if __name__ == "__main__":
-    # stdio is default; FastMCP also supports SSE ("http") if you add --port
-    mcp.run() 
+    mcp.run(transport="streamable-http")
